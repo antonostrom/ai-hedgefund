@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/pipeline/prices",
+      "schedule": "0 5 * * 1-5"
+    }
+  ]
+}
