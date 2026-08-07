@@ -43,35 +43,35 @@ export async function GET(request: Request) {
             modules: ["summaryDetail", "defaultKeyStatistics", "financialData"],
           });
 
-          const sd = summary.summaryDetail ?? {};
-          const ks = summary.defaultKeyStatistics ?? {};
-          const fd = summary.financialData ?? {};
+          const sd = summary.summaryDetail;
+          const ks = summary.defaultKeyStatistics;
+          const fd = summary.financialData;
 
-          const marketCap = sd.marketCap ?? null;
-          const freeCashFlow = fd.freeCashflow ?? null;
+          const marketCap = sd?.marketCap ?? null;
+          const freeCashFlow = fd?.freeCashflow ?? null;
           const fcfYield =
             marketCap && freeCashFlow ? freeCashFlow / marketCap : null;
 
           const row = {
             ticker,
             market_cap: marketCap,
-            trailing_pe: sd.trailingPE ?? null,
-            forward_pe: sd.forwardPE ?? null,
-            peg_ratio: ks.pegRatio ?? null,
-            price_to_book: ks.priceToBook ?? null,
-            ev_to_ebitda: ks.enterpriseToEbitda ?? null,
-            price_to_sales: sd.priceToSalesTrailing12Months ?? null,
-            return_on_equity: fd.returnOnEquity ?? null,
-            return_on_assets: fd.returnOnAssets ?? null,
-            profit_margin: fd.profitMargins ?? null,
-            operating_margin: fd.operatingMargins ?? null,
-            revenue_growth: fd.revenueGrowth ?? null,
-            earnings_growth: fd.earningsGrowth ?? null,
-            debt_to_equity: fd.debtToEquity ?? null,
+            trailing_pe: sd?.trailingPE ?? null,
+            forward_pe: sd?.forwardPE ?? null,
+            peg_ratio: ks?.pegRatio ?? null,
+            price_to_book: ks?.priceToBook ?? null,
+            ev_to_ebitda: ks?.enterpriseToEbitda ?? null,
+            price_to_sales: sd?.priceToSalesTrailing12Months ?? null,
+            return_on_equity: fd?.returnOnEquity ?? null,
+            return_on_assets: fd?.returnOnAssets ?? null,
+            profit_margin: fd?.profitMargins ?? null,
+            operating_margin: fd?.operatingMargins ?? null,
+            revenue_growth: fd?.revenueGrowth ?? null,
+            earnings_growth: fd?.earningsGrowth ?? null,
+            debt_to_equity: fd?.debtToEquity ?? null,
             free_cash_flow: freeCashFlow,
             fcf_yield: fcfYield,
-            dividend_yield: sd.dividendYield ?? null,
-            beta: ks.beta ?? null,
+            dividend_yield: sd?.dividendYield ?? null,
+            beta: ks?.beta ?? null,
           };
 
           const hasAnyData = Object.values(row).some(
