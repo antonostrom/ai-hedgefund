@@ -24,6 +24,7 @@ export type ReportData = {
   candidates: Candidate[];
   riskFlags: RiskFlag[];
   technicalFlags: string[];
+  newsSummary: string[];
   portfolioNote: string | null;
   dataQualityNote: string | null;
 };
@@ -72,6 +73,13 @@ export function buildReportHtml(data: ReportData): string {
           .join("")}</ul>`
       : `<p style="color:#64748b; font-size:14px; margin:0;">No overbought/oversold or trend signals on your holdings today.</p>`;
 
+  const newsSummaryHtml =
+    data.newsSummary.length > 0
+      ? `<ul style="margin:0; padding-left:18px; color:#334155; font-size:14px;">${data.newsSummary
+          .map((line) => `<li style="margin-bottom:6px;">${line}</li>`)
+          .join("")}</ul>`
+      : `<p style="color:#64748b; font-size:14px; margin:0;">No news summary available today.</p>`;
+
   return `
 <!DOCTYPE html>
 <html>
@@ -93,6 +101,13 @@ export function buildReportHtml(data: ReportData): string {
               <table width="100%" cellpadding="0" cellspacing="0">
                 ${indexRows}
               </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <h2 style="margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b;">Macro &amp; News</h2>
+              ${newsSummaryHtml}
             </td>
           </tr>
 

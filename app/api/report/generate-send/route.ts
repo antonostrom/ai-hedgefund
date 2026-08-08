@@ -3,6 +3,8 @@ import YahooFinance from "yahoo-finance2";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { dailyReturns, pearsonCorrelation } from "@/lib/risk/calc";
 import { buildReportHtml, type ReportData } from "@/lib/email/template";
+import { fetchAllHeadlines } from "@/lib/news/fetch-headlines";
+import { summarizeHeadlines } from "@/lib/news/summarize";
 
 const yahooFinance = new YahooFinance();
 
@@ -42,6 +44,7 @@ export async function GET(request: Request) {
 
   const resendApiKey = process.env.RESEND_API_KEY;
   const recipient = process.env.REPORT_RECIPIENT_EMAIL;
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
   if (!resendApiKey || !recipient) {
     return NextResponse.json(
       { error: "RESEND_API_KEY or REPORT_RECIPIENT_EMAIL not set" },
@@ -58,6 +61,15 @@ export async function GET(request: Request) {
       changePct: await fetchIndexChange(idx.symbol),
     }))
   );
+
+  // --- Macro & news summary ---
+  let newsSummary: string[];
+  if (!anthropicApiKey) {
+    newsSummary = ["News summarization not configured (ANTHROPIC_API_KEY not set)."];
+  } else {
+    const headlines = await fetchAllHeadlines();
+    newsSummary = await summarizeHeadlines(headlines, anthropicApiKey);
+  }
 
   // --- Top ranked candidates (most recent scoring run) ---
   const { data: latestDateRow } = await supabase
@@ -173,8 +185,6 @@ export async function GET(request: Request) {
       .in("ticker", tickers)
       .order("as_of_date", { ascending: false });
 
-    // Keep only the most recent row per ticker (query above is already
-    // newest-first, so the first occurrence per ticker is the latest)
     const latestByTicker = new Map<string, NonNullable<typeof technicalRows>[number]>();
     for (const row of technicalRows ?? []) {
       if (!latestByTicker.has(row.ticker)) latestByTicker.set(row.ticker, row);
@@ -213,6 +223,7 @@ export async function GET(request: Request) {
     candidates,
     riskFlags,
     technicalFlags,
+    newsSummary,
     portfolioNote,
     dataQualityNote,
   });
