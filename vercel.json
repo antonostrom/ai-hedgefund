@@ -11,6 +11,10 @@
     {
       "path": "/api/pipeline/score",
       "schedule": "0 7 * * 0"
+    },
+    {
+      "path": "/api/report/generate-send",
+      "schedule": "0 6 * * 1-5"
     }
   ]
 }
