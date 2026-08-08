@@ -5,6 +5,10 @@
       "schedule": "0 5 * * 1-5"
     },
     {
+      "path": "/api/pipeline/technicals",
+      "schedule": "20 5 * * 1-5"
+    },
+    {
       "path": "/api/pipeline/fundamentals",
       "schedule": "0 6 * * 0"
     },

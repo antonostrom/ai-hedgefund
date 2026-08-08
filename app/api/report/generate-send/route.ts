@@ -163,6 +163,39 @@ export async function GET(request: Request) {
     }
   }
 
+  // --- Technical signals on portfolio holdings ---
+  const technicalFlags: string[] = [];
+  if (holdings && holdings.length > 0) {
+    const tickers = holdings.map((h) => h.ticker);
+    const { data: technicalRows } = await supabase
+      .from("technicals")
+      .select("ticker, as_of_date, rsi14, rsi_signal, trend")
+      .in("ticker", tickers)
+      .order("as_of_date", { ascending: false });
+
+    // Keep only the most recent row per ticker (query above is already
+    // newest-first, so the first occurrence per ticker is the latest)
+    const latestByTicker = new Map<string, NonNullable<typeof technicalRows>[number]>();
+    for (const row of technicalRows ?? []) {
+      if (!latestByTicker.has(row.ticker)) latestByTicker.set(row.ticker, row);
+    }
+
+    for (const [ticker, row] of latestByTicker.entries()) {
+      if (row.rsi_signal === "overbought") {
+        technicalFlags.push(
+          `${ticker} is overbought (RSI ${row.rsi14?.toFixed(0)}) - may be due for a pullback.`
+        );
+      } else if (row.rsi_signal === "oversold") {
+        technicalFlags.push(
+          `${ticker} is oversold (RSI ${row.rsi14?.toFixed(0)}) - may be due for a bounce.`
+        );
+      }
+      if (row.trend === "below_sma50") {
+        technicalFlags.push(`${ticker} is trading below its 50-day average - bearish trend.`);
+      }
+    }
+  }
+
   const today = new Date();
   const dateLabel = today.toLocaleDateString("en-GB", {
     weekday: "long",
@@ -179,6 +212,7 @@ export async function GET(request: Request) {
     indices,
     candidates,
     riskFlags,
+    technicalFlags,
     portfolioNote,
     dataQualityNote,
   });
@@ -206,5 +240,6 @@ export async function GET(request: Request) {
     sent: true,
     candidatesCount: candidates.length,
     riskFlagsCount: riskFlags.length,
+    technicalFlagsCount: technicalFlags.length,
   });
 }

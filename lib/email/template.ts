@@ -23,6 +23,7 @@ export type ReportData = {
   indices: IndexSnapshot[];
   candidates: Candidate[];
   riskFlags: RiskFlag[];
+  technicalFlags: string[];
   portfolioNote: string | null;
   dataQualityNote: string | null;
 };
@@ -63,6 +64,13 @@ export function buildReportHtml(data: ReportData): string {
           .map((f) => `<li style="margin-bottom:6px;">${f}</li>`)
           .join("")}</ul>`
       : `<p style="color:#64748b; font-size:14px; margin:0;">No flags today.</p>`;
+
+  const technicalFlagsHtml =
+    data.technicalFlags.length > 0
+      ? `<ul style="margin:0; padding-left:18px; color:#334155; font-size:14px;">${data.technicalFlags
+          .map((f) => `<li style="margin-bottom:6px;">${f}</li>`)
+          .join("")}</ul>`
+      : `<p style="color:#64748b; font-size:14px; margin:0;">No overbought/oversold or trend signals on your holdings today.</p>`;
 
   return `
 <!DOCTYPE html>
@@ -116,6 +124,13 @@ export function buildReportHtml(data: ReportData): string {
                   ? `<p style="margin:12px 0 0; font-size:13px; color:#94a3b8;">${data.portfolioNote}</p>`
                   : ""
               }
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <h2 style="margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b;">Technical Signals</h2>
+              ${technicalFlagsHtml}
             </td>
           </tr>
 
