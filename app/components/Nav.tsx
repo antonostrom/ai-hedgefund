@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/performance", label: "Performance" },
   { href: "/risk", label: "Risk" },
   { href: "/sectors", label: "Sectors" },
+  { href: "/macro", label: "Macro" },
 ];
 
 export default function Nav() {
