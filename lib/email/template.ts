@@ -25,6 +25,7 @@ export type ReportData = {
   riskFlags: RiskFlag[];
   technicalFlags: string[];
   newsSummary: string[];
+  sectorRotation: string[];
   portfolioNote: string | null;
   dataQualityNote: string | null;
 };
@@ -80,6 +81,13 @@ export function buildReportHtml(data: ReportData): string {
           .join("")}</ul>`
       : `<p style="color:#64748b; font-size:14px; margin:0;">No news summary available today.</p>`;
 
+  const sectorRotationHtml =
+    data.sectorRotation.length > 0
+      ? `<ul style="margin:0; padding-left:18px; color:#334155; font-size:14px;">${data.sectorRotation
+          .map((line) => `<li style="margin-bottom:6px;">${line}</li>`)
+          .join("")}</ul>`
+      : `<p style="color:#64748b; font-size:14px; margin:0;">No sector rotation signal today.</p>`;
+
   return `
 <!DOCTYPE html>
 <html>
@@ -127,6 +135,13 @@ export function buildReportHtml(data: ReportData): string {
                     </table>`
                   : `<p style="color:#64748b; font-size:14px; margin:0;">No scored candidates available yet.</p>`
               }
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <h2 style="margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b;">Sector Rotation</h2>
+              ${sectorRotationHtml}
             </td>
           </tr>
 

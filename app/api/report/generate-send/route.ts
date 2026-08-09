@@ -5,6 +5,7 @@ import { dailyReturns, pearsonCorrelation } from "@/lib/risk/calc";
 import { buildReportHtml, type ReportData } from "@/lib/email/template";
 import { fetchAllHeadlines } from "@/lib/news/fetch-headlines";
 import { summarizeHeadlines } from "@/lib/news/summarize";
+import { computeSectorRotation } from "@/lib/research/sectors";
 
 const yahooFinance = new YahooFinance();
 
@@ -105,6 +106,32 @@ export async function GET(request: Request) {
         compositeScore: r.composite_score as number,
         dataCompleteness: r.data_completeness as number,
       }));
+    }
+  }
+
+  // --- Sector rotation ---
+  const rotation = await computeSectorRotation(supabase);
+  const sectorRotation: string[] = [];
+  if (!rotation.priorDate) {
+    sectorRotation.push(
+      "Not enough weekly scoring history yet to show sector rotation - check back in a few weeks."
+    );
+  } else {
+    const withDelta = rotation.sectors.filter((s) => s.delta !== null) as (typeof rotation.sectors[number] & { delta: number })[];
+    const gainers = [...withDelta].sort((a, b) => b.delta - a.delta).slice(0, 2);
+    const decliners = [...withDelta].sort((a, b) => a.delta - b.delta).slice(0, 2);
+    for (const s of gainers) {
+      if (s.delta > 0.05) {
+        sectorRotation.push(`${s.sector} strengthening (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(2)} avg score vs ${rotation.priorDate}).`);
+      }
+    }
+    for (const s of decliners) {
+      if (s.delta < -0.05) {
+        sectorRotation.push(`${s.sector} weakening (${s.delta.toFixed(2)} avg score vs ${rotation.priorDate}).`);
+      }
+    }
+    if (sectorRotation.length === 0) {
+      sectorRotation.push("No significant sector rotation this week.");
     }
   }
 
@@ -224,6 +251,7 @@ export async function GET(request: Request) {
     riskFlags,
     technicalFlags,
     newsSummary,
+    sectorRotation,
     portfolioNote,
     dataQualityNote,
   });
