@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Nav from "@/app/components/Nav";
 
 type Holding = {
   ticker: string;
@@ -118,6 +119,7 @@ export default function RiskPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      <Nav />
       <div className="mx-auto max-w-5xl px-4 py-8 space-y-8">
         <header>
           <h1 className="text-xl font-medium">Portfolio risk</h1>

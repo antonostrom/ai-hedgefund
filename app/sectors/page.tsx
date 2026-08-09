@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Nav from "@/app/components/Nav";
 
 type SectorAggregate = {
   sector: string;
@@ -85,6 +86,7 @@ export default function SectorsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      <Nav />
       <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
         <header>
           <h1 className="text-xl font-medium">Sector rotation</h1>
