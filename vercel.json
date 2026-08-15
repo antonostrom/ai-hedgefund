@@ -9,12 +9,12 @@
       "schedule": "20 5 * * 1-5"
     },
     {
-      "path": "/api/pipeline/fundamentals",
-      "schedule": "0 6 * * 0"
+      "path": "/api/pipeline/score",
+      "schedule": "40 5 * * 1-5"
     },
     {
-      "path": "/api/pipeline/score",
-      "schedule": "0 7 * * 0"
+      "path": "/api/pipeline/fundamentals",
+      "schedule": "0 6 * * 0"
     },
     {
       "path": "/api/report/generate-send",
