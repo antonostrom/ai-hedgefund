@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/risk", label: "Risk" },
   { href: "/sectors", label: "Sectors" },
   { href: "/macro", label: "Macro" },
+  { href: "/model", label: "Model" },
 ];
 
 export default function Nav() {
