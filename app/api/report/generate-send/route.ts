@@ -6,6 +6,7 @@ import { buildReportHtml, type ReportData } from "@/lib/email/template";
 import { fetchAllHeadlines } from "@/lib/news/fetch-headlines";
 import { summarizeHeadlines } from "@/lib/news/summarize";
 import { computeSectorRotation } from "@/lib/research/sectors";
+import { pickDiversifiedCandidates } from "@/lib/research/pick-candidates";
 
 const yahooFinance = new YahooFinance();
 
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
     newsSummary = await summarizeHeadlines(headlines, anthropicApiKey);
   }
 
-  // --- Top ranked candidates (most recent scoring run) ---
+  // --- Top ranked candidates (most recent scoring run, sector-diversified) ---
   const { data: latestDateRow } = await supabase
     .from("factor_scores")
     .select("as_of_date")
@@ -82,29 +83,26 @@ export async function GET(request: Request) {
 
   let candidates: ReportData["candidates"] = [];
   if (latestDateRow) {
-    const { data: scoreRows } = await supabase
-      .from("factor_scores")
-      .select("ticker, composite_score, data_completeness")
-      .eq("as_of_date", latestDateRow.as_of_date)
-      .not("composite_score", "is", null)
-      .gte("data_completeness", 0.5)
-      .order("composite_score", { ascending: false })
-      .limit(8);
+    const picks = await pickDiversifiedCandidates(supabase, latestDateRow.as_of_date, {
+      topN: 8,
+      maxPerSector: 2, // stops the list being dominated by one correlated theme (e.g. several semiconductor names)
+      minDataCompleteness: 0.5,
+    });
 
-    if (scoreRows && scoreRows.length > 0) {
-      const tickers = scoreRows.map((r) => r.ticker);
+    if (picks.length > 0) {
+      const tickers = picks.map((p) => p.ticker);
       const { data: universeRows } = await supabase
         .from("universe")
-        .select("ticker, name, sector")
+        .select("ticker, name")
         .in("ticker", tickers);
-      const universeByTicker = new Map((universeRows ?? []).map((r) => [r.ticker, r]));
+      const nameByTicker = new Map((universeRows ?? []).map((r) => [r.ticker, r.name]));
 
-      candidates = scoreRows.map((r) => ({
-        ticker: r.ticker,
-        name: universeByTicker.get(r.ticker)?.name ?? null,
-        sector: universeByTicker.get(r.ticker)?.sector ?? null,
-        compositeScore: r.composite_score as number,
-        dataCompleteness: r.data_completeness as number,
+      candidates = picks.map((p) => ({
+        ticker: p.ticker,
+        name: nameByTicker.get(p.ticker) ?? null,
+        sector: p.sector,
+        compositeScore: p.compositeScore,
+        dataCompleteness: p.dataCompleteness,
       }));
     }
   }
@@ -212,6 +210,8 @@ export async function GET(request: Request) {
       .in("ticker", tickers)
       .order("as_of_date", { ascending: false });
 
+    // Keep only the most recent row per ticker (query above is already
+    // newest-first, so the first occurrence per ticker is the latest)
     const latestByTicker = new Map<string, NonNullable<typeof technicalRows>[number]>();
     for (const row of technicalRows ?? []) {
       if (!latestByTicker.has(row.ticker)) latestByTicker.set(row.ticker, row);

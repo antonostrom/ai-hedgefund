@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import YahooFinance from "yahoo-finance2";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { isAuthorized } from "@/lib/auth";
+import { pickDiversifiedCandidates } from "@/lib/research/pick-candidates";
 
 const yahooFinance = new YahooFinance();
 
@@ -9,6 +10,7 @@ export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 const TOP_N = 8; // matches the daily email's candidate count
+const MAX_PER_SECTOR = 2; // matches the email's diversification cap
 const MIN_DATA_COMPLETENESS = 0.5; // matches the email's filter
 
 export async function GET(request: Request) {
@@ -18,10 +20,9 @@ export async function GET(request: Request) {
 
   const supabase = getServiceSupabase();
 
-  // Paginated fetch - a single unpaginated query hits Supabase's 1000-row
-  // cap after only ~1.5 days of scoring history (with ~650 stocks scored
-  // per day), silently truncating the date list to just the first couple
-  // of days. This loops until every row is collected, regardless of scale.
+  // Paginated fetch - an unpaginated query silently caps at Supabase's
+  // 1000-row default once factor_scores grows past ~1.5 days of daily
+  // scoring history, which would truncate this to only the earliest dates.
   async function fetchAllDates(): Promise<string[]> {
     const pageSize = 1000;
     let from = 0;
@@ -56,29 +57,26 @@ export async function GET(request: Request) {
     });
   }
 
-  // For each consecutive pair of scoring dates, pick that day's top N and
-  // measure the return achieved by holding them to the next scoring date.
+  // For each consecutive pair of scoring dates, pick that day's sector-diversified
+  // top N and measure the return achieved by holding them to the next scoring date.
   const dailyReturns: { date: string; candidateReturn: number | null; pickedTickers: string[] }[] = [];
 
   for (let i = 0; i < distinctDates.length - 1; i++) {
     const pickDate = distinctDates[i];
     const nextDate = distinctDates[i + 1];
 
-    const { data: scoreRows } = await supabase
-      .from("factor_scores")
-      .select("ticker, composite_score, data_completeness")
-      .eq("as_of_date", pickDate)
-      .not("composite_score", "is", null)
-      .gte("data_completeness", MIN_DATA_COMPLETENESS)
-      .order("composite_score", { ascending: false })
-      .limit(TOP_N);
+    const picks = await pickDiversifiedCandidates(supabase, pickDate, {
+      topN: TOP_N,
+      maxPerSector: MAX_PER_SECTOR,
+      minDataCompleteness: MIN_DATA_COMPLETENESS,
+    });
 
-    if (!scoreRows || scoreRows.length === 0) {
+    if (picks.length === 0) {
       dailyReturns.push({ date: nextDate, candidateReturn: null, pickedTickers: [] });
       continue;
     }
 
-    const tickers = scoreRows.map((r) => r.ticker);
+    const tickers = picks.map((p) => p.ticker);
     const { data: priceRows } = await supabase
       .from("price_history")
       .select("ticker, date, close")

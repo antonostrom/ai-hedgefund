@@ -56,16 +56,37 @@ async function fetchSectorAverages(
 export async function computeSectorRotation(
   supabase: ReturnType<typeof getServiceSupabase>
 ): Promise<SectorRotationResult> {
-  const { data: dateRows } = await supabase
-    .from("factor_scores")
-    .select("as_of_date")
-    .order("as_of_date", { ascending: false });
+  // Paginated fetch - an unpaginated query silently caps at Supabase's
+  // 1000-row default once factor_scores grows past ~1.5 days of daily
+  // scoring history, which would truncate exactly the older dates this
+  // function needs for its "compare to ~4 weeks ago" lookup. Same bug
+  // pattern as the one found and fixed in the model performance route.
+  async function fetchAllDates(): Promise<string[]> {
+    const pageSize = 1000;
+    let from = 0;
+    const dates = new Set<string>();
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await supabase
+        .from("factor_scores")
+        .select("as_of_date")
+        .order("as_of_date", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      for (const row of data) dates.add(row.as_of_date as string);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return Array.from(dates).sort().reverse(); // newest first, matching the original query's intent
+  }
 
-  if (!dateRows || dateRows.length === 0) {
+  const distinctDates = await fetchAllDates();
+
+  if (distinctDates.length === 0) {
     return { currentDate: null, priorDate: null, sectors: [] };
   }
 
-  const distinctDates = Array.from(new Set(dateRows.map((r) => r.as_of_date as string)));
   const currentDate = distinctDates[0];
   const currentMs = new Date(currentDate).getTime();
 
