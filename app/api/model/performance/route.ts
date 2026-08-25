@@ -18,16 +18,35 @@ export async function GET(request: Request) {
 
   const supabase = getServiceSupabase();
 
-  // Every distinct date the scoring engine has run
-  const { data: dateRows } = await supabase
-    .from("factor_scores")
-    .select("as_of_date")
-    .order("as_of_date", { ascending: true });
+  // Paginated fetch - a single unpaginated query hits Supabase's 1000-row
+  // cap after only ~1.5 days of scoring history (with ~650 stocks scored
+  // per day), silently truncating the date list to just the first couple
+  // of days. This loops until every row is collected, regardless of scale.
+  async function fetchAllDates(): Promise<string[]> {
+    const pageSize = 1000;
+    let from = 0;
+    const dates = new Set<string>();
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await supabase
+        .from("factor_scores")
+        .select("as_of_date")
+        .order("as_of_date", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      for (const row of data) dates.add(row.as_of_date as string);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return Array.from(dates).sort();
+  }
 
-  if (!dateRows || dateRows.length === 0) {
+  const distinctDates = await fetchAllDates();
+
+  if (distinctDates.length === 0) {
     return NextResponse.json({ series: [], summary: null, note: "No scoring history yet." });
   }
-  const distinctDates = Array.from(new Set(dateRows.map((r) => r.as_of_date as string)));
 
   if (distinctDates.length < 2) {
     return NextResponse.json({
