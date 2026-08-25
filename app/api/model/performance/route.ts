@@ -6,6 +6,7 @@ import { isAuthorized } from "@/lib/auth";
 const yahooFinance = new YahooFinance();
 
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 const TOP_N = 8; // matches the daily email's candidate count
 const MIN_DATA_COMPLETENESS = 0.5; // matches the email's filter
