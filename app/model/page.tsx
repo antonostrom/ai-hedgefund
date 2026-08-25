@@ -28,7 +28,23 @@ type Summary = {
   latestPicks: string[];
 };
 
-type ModelData = { series: SeriesPoint[]; summary: Summary | null; note: string | null };
+type ModelData = { series: SeriesPoint[]; summary: Summary | null; note: string | null; excludeSector?: string | null };
+
+// Common GICS sectors seen across the universe - "None" means no filter.
+const SECTOR_OPTIONS = [
+  "None",
+  "Information Technology",
+  "Financials",
+  "Industrials",
+  "Health Care",
+  "Consumer Discretionary",
+  "Consumer Staples",
+  "Energy",
+  "Materials",
+  "Real Estate",
+  "Utilities",
+  "Communication Services",
+];
 
 function fmtPct(n: number | null): string {
   if (n === null) return "—";
@@ -42,6 +58,7 @@ export default function ModelPage() {
   const [data, setData] = useState<ModelData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [excludeSector, setExcludeSector] = useState("None");
 
   useEffect(() => {
     const stored = window.localStorage.getItem("portfolio_access_key");
@@ -53,7 +70,11 @@ export default function ModelPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/model/performance", {
+      const url =
+        excludeSector !== "None"
+          ? `/api/model/performance?excludeSector=${encodeURIComponent(excludeSector)}`
+          : "/api/model/performance";
+      const res = await fetch(url, {
         headers: { "x-portfolio-key": accessKey },
       });
       if (!res.ok) throw new Error((await res.json()).error || "Failed to load");
@@ -63,7 +84,7 @@ export default function ModelPage() {
     } finally {
       setLoading(false);
     }
-  }, [accessKey]);
+  }, [accessKey, excludeSector]);
 
   useEffect(() => {
     if (accessKey) load();
@@ -111,6 +132,30 @@ export default function ModelPage() {
             actually have an edge?
           </p>
         </header>
+
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-slate-400" htmlFor="sector-filter">
+            Exclude sector:
+          </label>
+          <select
+            id="sector-filter"
+            value={excludeSector}
+            onChange={(e) => setExcludeSector(e.target.value)}
+            className="rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500"
+          >
+            {SECTOR_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          {excludeSector !== "None" && (
+            <span className="text-xs text-slate-500">
+              Recomputed from that day's actual picks, minus any {excludeSector} names — not a
+              re-simulation with replacement stocks.
+            </span>
+          )}
+        </div>
 
         {loading && <p className="text-slate-500">Loading…</p>}
         {error && (
@@ -221,11 +266,13 @@ export default function ModelPage() {
         )}
 
         <div className="rounded border border-slate-800 bg-slate-900/50 px-4 py-3 text-xs text-slate-500">
-          Methodology: each scoring run's top 8 (by composite_score, min. 50% data completeness) are
-          held equally-weighted until the next scoring run, then re-picked from scratch. This tests
-          whether the ranking signal itself has predictive value — not a real portfolio, no fees or
-          slippage modeled, and only tracked from when daily scoring began (not a retroactive
-          backtest).
+          Methodology: each scoring run's top 8 (by composite_score, min. 50% data completeness,
+          capped at 2 picks per sector) are held equally-weighted until the next scoring run, then
+          re-picked from scratch. This tests whether the ranking signal itself has predictive value
+          — not a real portfolio, no fees or slippage modeled, and only tracked from when daily
+          scoring began (not a retroactive backtest). The sector filter above removes matching names
+          from each day's actual picks before averaging — it does not simulate picking a replacement
+          stock in their place.
         </div>
       </div>
     </div>

@@ -18,6 +18,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const excludeSector = searchParams.get("excludeSector"); // e.g. "Information Technology" - null means no filter
+
   const supabase = getServiceSupabase();
 
   // Paginated fetch - an unpaginated query silently caps at Supabase's
@@ -71,12 +74,21 @@ export async function GET(request: Request) {
       minDataCompleteness: MIN_DATA_COMPLETENESS,
     });
 
-    if (picks.length === 0) {
+    // Excludes an already-selected pick if it's in the filtered-out
+    // sector - this is NOT re-picking a replacement stock from further
+    // down the list. It answers "how did the rest of that day's actual
+    // picks do without this sector," not "what if we'd picked something
+    // else instead."
+    const filteredPicks = excludeSector
+      ? picks.filter((p) => p.sector !== excludeSector)
+      : picks;
+
+    if (filteredPicks.length === 0) {
       dailyReturns.push({ date: nextDate, candidateReturn: null, pickedTickers: [] });
       continue;
     }
 
-    const tickers = picks.map((p) => p.ticker);
+    const tickers = filteredPicks.map((p) => p.ticker);
     const { data: priceRows } = await supabase
       .from("price_history")
       .select("ticker, date, close")
@@ -180,6 +192,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     series,
     summary,
+    excludeSector: excludeSector || null,
     note:
       validReturns.length < 5
         ? `Only ${validReturns.length} trading day(s) tracked so far - this needs several weeks to say anything meaningful about whether the ranking model has real predictive value. Tracking started when daily scoring began; this is not a retroactive backtest.`
