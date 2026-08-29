@@ -72,8 +72,14 @@ export async function GET(request: Request) {
       continue;
     }
 
-    // Sum each holding's forward-filled value series into one portfolio series
-    let portfolioValues = new Array(allDates.length).fill(0);
+    // Find where the portfolio actually starts (first date with real value)
+    // and trim everything to that point forward. Without this, the
+    // benchmark gets fetched over the full price_history date range (which
+    // can span years, e.g. after a historical backfill) while the
+    // portfolio only starts wherever the holding was actually bought -
+    // two different time bases plotted on the same 0% starting line,
+    // making the comparison meaningless.
+    const rawPortfolioValues = new Array(allDates.length).fill(0);
     let costBasisTotal = 0;
     let costBasisComplete = true;
 
@@ -84,7 +90,7 @@ export async function GET(request: Request) {
         h.shares,
         h.date_added
       );
-      portfolioValues = portfolioValues.map((v, i) => v + series[i]);
+      for (let i = 0; i < rawPortfolioValues.length; i++) rawPortfolioValues[i] += series[i];
 
       if (h.cost_basis !== null) {
         costBasisTotal += h.cost_basis * h.shares;
@@ -93,20 +99,26 @@ export async function GET(request: Request) {
       }
     }
 
+    const startIdx = rawPortfolioValues.findIndex((v) => v > 0);
+    const tradingDates = startIdx === -1 ? [] : allDates.slice(startIdx);
+    const portfolioValues = startIdx === -1 ? [] : rawPortfolioValues.slice(startIdx);
+
     const portfolioPct = normalizeToPct(portfolioValues);
-    const currentValue = portfolioValues[portfolioValues.length - 1] || null;
+    const currentValue = portfolioValues.length > 0 ? portfolioValues[portfolioValues.length - 1] || null : null;
     const unrealizedPnlPct =
       currentValue !== null && costBasisComplete && costBasisTotal > 0
         ? ((currentValue - costBasisTotal) / costBasisTotal) * 100
         : null;
 
-    // Benchmark index, if one is configured for this currency
+    // Benchmark index, if one is configured for this currency - fetched
+    // starting from the portfolio's actual start date, not the full
+    // price_history range, so both lines begin at 0% on the same day.
     let benchmarkName: string | null = null;
     const benchmarkByDate = new Map<string, number>();
     const benchmark = BENCHMARKS[currency];
-    if (benchmark) {
+    if (benchmark && tradingDates.length > 0) {
       try {
-        const period1 = new Date(allDates[0]);
+        const period1 = new Date(tradingDates[0]);
         const result = await yahooFinance.chart(benchmark.symbol, { period1, interval: "1d" });
         const closes = result.quotes
           .filter((q) => q.close !== null)
@@ -122,7 +134,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const series = allDates.map((date, i) => ({
+    const series = tradingDates.map((date, i) => ({
       date,
       portfolioPct: portfolioPct[i],
       benchmarkPct: benchmarkByDate.get(date) ?? null,
