@@ -29,6 +29,15 @@ type MacroData = {
   kpis: Kpi[];
   yieldCurve: { currentSpread: number; interpretation: { label: string; tone: string } } | null;
   yieldCurveSeries: { date: string; spread: number }[];
+  yield2y: {
+    current: number | null;
+    change1d: number | null;
+    change1w: number | null;
+    change1m: number | null;
+    note: string | null;
+  };
+  yieldCurve10y2y: { currentSpread: number; interpretation: { label: string; tone: string } } | null;
+  yieldCurve10y2ySeries: { date: string; spread: number }[];
   vixSeries: { date: string; value: number }[];
   asOf: string;
 };
@@ -168,7 +177,68 @@ export default function MacroPage() {
                   </div>
                 </div>
               )}
+
+              <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  2-Year Treasury Yield
+                </div>
+                {data.yield2y.current !== null ? (
+                  <>
+                    <div className="mt-1 font-mono text-2xl">{data.yield2y.current.toFixed(2)}%</div>
+                    <div className="mt-1 flex gap-4 text-xs text-slate-400">
+                      <span>1D {fmtChange(data.yield2y.change1d)}</span>
+                      <span>1W {fmtChange(data.yield2y.change1w)}</span>
+                      <span>1M {fmtChange(data.yield2y.change1m)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-1 text-sm text-amber-400">{data.yield2y.note}</div>
+                )}
+              </div>
+
+              {data.yieldCurve10y2y && (
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                    Yield Curve (10Y − 2Y)
+                  </div>
+                  <div className="mt-1 font-mono text-2xl">
+                    {data.yieldCurve10y2y.currentSpread.toFixed(2)}%
+                  </div>
+                  <div className={`mt-2 text-xs ${toneColor(data.yieldCurve10y2y.interpretation.tone)}`}>
+                    {data.yieldCurve10y2y.interpretation.label}
+                  </div>
+                </div>
+              )}
             </div>
+
+            {data.yieldCurve10y2ySeries.length > 1 && (
+              <section className="rounded-lg border border-slate-800 bg-slate-900 p-5">
+                <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
+                  Yield curve trend (10Y − 2Y, last 90 days)
+                </h2>
+                <div style={{ width: "100%", height: 220 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={data.yieldCurve10y2ySeries}>
+                      <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} minTickGap={40} />
+                      <YAxis tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(v) => `${v}%`} width={45} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", fontSize: 12 }}
+                        labelStyle={{ color: "#94a3b8" }}
+                        formatter={(value: any) => `${Number(value).toFixed(2)}%`}
+                      />
+                      <ReferenceLine y={0} stroke="#dc2626" strokeDasharray="4 4" />
+                      <Line type="monotone" dataKey="spread" stroke="#a78bfa" dot={false} strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  This is the version most commonly cited in financial media — the 10Y−3M version
+                  above is the New York Fed's preferred recession-timing indicator. They can send
+                  different signals at times.
+                </p>
+              </section>
+            )}
 
             {data.yieldCurveSeries.length > 1 && (
               <section className="rounded-lg border border-slate-800 bg-slate-900 p-5">
