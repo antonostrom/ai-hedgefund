@@ -18,6 +18,14 @@ type Candidate = {
 
 type RiskFlag = string;
 
+export type ModelPerfSnapshot = {
+  daysTracked: number;
+  candidateTotalReturnPct: number | null;
+  benchmarkTotalReturnPct: number | null;
+  winRateVsBenchmark: number | null;
+  note: string | null;
+};
+
 export type ReportData = {
   dateLabel: string;
   indices: IndexSnapshot[];
@@ -26,6 +34,9 @@ export type ReportData = {
   technicalFlags: string[];
   newsSummary: string[];
   sectorRotation: string[];
+  modelPerformance: ModelPerfSnapshot | null;
+  modelPerformanceExcluding: { sector: string; snapshot: ModelPerfSnapshot } | null;
+  rebalance: { added: string[]; dropped: string[]; note: string | null };
   portfolioNote: string | null;
   dataQualityNote: string | null;
 };
@@ -88,7 +99,60 @@ export function buildReportHtml(data: ReportData): string {
           .join("")}</ul>`
       : `<p style="color:#64748b; font-size:14px; margin:0;">No sector rotation signal today.</p>`;
 
-  return `
+  function fmtPct(n: number | null): string {
+    if (n === null) return "\u2014";
+    const sign = n >= 0 ? "+" : "";
+    const color = n >= 0 ? "#16a34a" : "#dc2626";
+    return `<span style="color:${color}">${sign}${n.toFixed(1)}%</span>`;
+  }
+
+  function perfRow(label: string, snap: ModelPerfSnapshot): string {
+    if (snap.note) {
+      return `<tr><td colspan="2" style="padding:4px 0; font-size:12px; color:#94a3b8; font-style:italic;">${label}: ${snap.note}</td></tr>`;
+    }
+    return `
+      <tr>
+        <td style="padding:4px 12px 4px 0; font-size:13px; color:#334155;">${label} (${snap.daysTracked}d)</td>
+        <td style="padding:4px 0; font-size:13px; text-align:right;">
+          picks ${fmtPct(snap.candidateTotalReturnPct)} vs S&amp;P ${fmtPct(snap.benchmarkTotalReturnPct)}
+          &nbsp;&middot;&nbsp; win rate ${snap.winRateVsBenchmark !== null ? Math.round(snap.winRateVsBenchmark * 100) + "%" : "\u2014"}
+        </td>
+      </tr>`;
+  }
+
+  const modelPerfHtml = data.modelPerformance
+    ? `<table width="100%" cellpadding="0" cellspacing="0">
+        ${perfRow("Top-8 picks", data.modelPerformance)}
+        ${
+          data.modelPerformanceExcluding
+            ? perfRow(`Excl. ${data.modelPerformanceExcluding.sector}`, data.modelPerformanceExcluding.snapshot)
+            : ""
+        }
+      </table>`
+    : `<p style="color:#64748b; font-size:14px; margin:0;">No model performance data yet.</p>`;
+
+  const rebalanceHtml = (() => {
+    if (data.rebalance.note) {
+      return `<p style="color:#64748b; font-size:14px; margin:0;">${data.rebalance.note}</p>`;
+    }
+    if (data.rebalance.added.length === 0 && data.rebalance.dropped.length === 0) {
+      return `<p style="color:#64748b; font-size:14px; margin:0;">No changes since yesterday's picks.</p>`;
+    }
+    const parts: string[] = [];
+    if (data.rebalance.added.length > 0) {
+      parts.push(
+        `<p style="margin:0 0 6px; font-size:13px;"><span style="color:#16a34a; font-weight:bold;">Added:</span> <span style="color:#334155;">${data.rebalance.added.join(", ")}</span></p>`
+      );
+    }
+    if (data.rebalance.dropped.length > 0) {
+      parts.push(
+        `<p style="margin:0; font-size:13px;"><span style="color:#dc2626; font-weight:bold;">Dropped:</span> <span style="color:#334155;">${data.rebalance.dropped.join(", ")}</span></p>`
+      );
+    }
+    return parts.join("");
+  })();
+
+return `
 <!DOCTYPE html>
 <html>
 <body style="margin:0; padding:0; background-color:#f1f5f9; font-family:-apple-system,Segoe UI,Roboto,sans-serif;">
@@ -135,6 +199,20 @@ export function buildReportHtml(data: ReportData): string {
                     </table>`
                   : `<p style="color:#64748b; font-size:14px; margin:0;">No scored candidates available yet.</p>`
               }
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <h2 style="margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b;">Model Signal</h2>
+              ${modelPerfHtml}
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <h2 style="margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b;">Rebalancing (vs. yesterday's picks)</h2>
+              ${rebalanceHtml}
             </td>
           </tr>
 

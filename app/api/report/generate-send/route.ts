@@ -6,7 +6,8 @@ import { buildReportHtml, type ReportData } from "@/lib/email/template";
 import { fetchAllHeadlines } from "@/lib/news/fetch-headlines";
 import { summarizeHeadlines } from "@/lib/news/summarize";
 import { computeSectorRotation } from "@/lib/research/sectors";
-import { pickDiversifiedCandidates } from "@/lib/research/pick-candidates";
+import { pickDiversifiedCandidates, type DiversifiedPick } from "@/lib/research/pick-candidates";
+import { fetchAllScoringDates, computeModelPerformance } from "@/lib/research/model-performance";
 
 const yahooFinance = new YahooFinance();
 
@@ -74,30 +75,30 @@ export async function GET(request: Request) {
   }
 
   // --- Top ranked candidates (most recent scoring run, sector-diversified) ---
-  const { data: latestDateRow } = await supabase
-    .from("factor_scores")
-    .select("as_of_date")
-    .order("as_of_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const SECONDARY_EXCLUDE_SECTOR = "Information Technology"; // adjust if a different sector becomes the more relevant one to watch
+
+  const allScoringDates = await fetchAllScoringDates(supabase);
+  const latestDate = allScoringDates.length > 0 ? allScoringDates[allScoringDates.length - 1] : null;
+  const previousDate = allScoringDates.length > 1 ? allScoringDates[allScoringDates.length - 2] : null;
 
   let candidates: ReportData["candidates"] = [];
-  if (latestDateRow) {
-    const picks = await pickDiversifiedCandidates(supabase, latestDateRow.as_of_date, {
+  let todayPicks: DiversifiedPick[] = [];
+  if (latestDate) {
+    todayPicks = await pickDiversifiedCandidates(supabase, latestDate, {
       topN: 8,
       maxPerSector: 2, // stops the list being dominated by one correlated theme (e.g. several semiconductor names)
       minDataCompleteness: 0.5,
     });
 
-    if (picks.length > 0) {
-      const tickers = picks.map((p) => p.ticker);
+    if (todayPicks.length > 0) {
+      const tickers = todayPicks.map((p) => p.ticker);
       const { data: universeRows } = await supabase
         .from("universe")
         .select("ticker, name")
         .in("ticker", tickers);
       const nameByTicker = new Map((universeRows ?? []).map((r) => [r.ticker, r.name]));
 
-      candidates = picks.map((p) => ({
+      candidates = todayPicks.map((p) => ({
         ticker: p.ticker,
         name: nameByTicker.get(p.ticker) ?? null,
         sector: p.sector,
@@ -106,6 +107,49 @@ export async function GET(request: Request) {
       }));
     }
   }
+
+  // --- Rebalancing: what changed vs. yesterday's picks ---
+  let rebalance: ReportData["rebalance"] = { added: [], dropped: [], note: null };
+  if (!previousDate) {
+    rebalance = { added: [], dropped: [], note: "First day of tracking - nothing to compare against yet." };
+  } else if (latestDate) {
+    const yesterdayPicks = await pickDiversifiedCandidates(supabase, previousDate, {
+      topN: 8,
+      maxPerSector: 2,
+      minDataCompleteness: 0.5,
+    });
+    const todayTickers = new Set(todayPicks.map((p) => p.ticker));
+    const yesterdayTickers = new Set(yesterdayPicks.map((p) => p.ticker));
+    const added = [...todayTickers].filter((t) => !yesterdayTickers.has(t));
+    const dropped = [...yesterdayTickers].filter((t) => !todayTickers.has(t));
+    rebalance = { added, dropped, note: null };
+  }
+
+  // --- Model performance (overall, and excluding the sector currently worth watching) ---
+  const modelPerfRaw = await computeModelPerformance(supabase, {});
+  const modelPerformance: ReportData["modelPerformance"] = modelPerfRaw.summary
+    ? {
+        daysTracked: modelPerfRaw.summary.daysTracked,
+        candidateTotalReturnPct: modelPerfRaw.summary.candidateTotalReturnPct,
+        benchmarkTotalReturnPct: modelPerfRaw.summary.benchmarkTotalReturnPct,
+        winRateVsBenchmark: modelPerfRaw.summary.winRateVsBenchmark,
+        note: modelPerfRaw.note,
+      }
+    : null;
+
+  const modelPerfExRaw = await computeModelPerformance(supabase, { excludeSector: SECONDARY_EXCLUDE_SECTOR });
+  const modelPerformanceExcluding: ReportData["modelPerformanceExcluding"] = modelPerfExRaw.summary
+    ? {
+        sector: SECONDARY_EXCLUDE_SECTOR,
+        snapshot: {
+          daysTracked: modelPerfExRaw.summary.daysTracked,
+          candidateTotalReturnPct: modelPerfExRaw.summary.candidateTotalReturnPct,
+          benchmarkTotalReturnPct: modelPerfExRaw.summary.benchmarkTotalReturnPct,
+          winRateVsBenchmark: modelPerfExRaw.summary.winRateVsBenchmark,
+          note: modelPerfExRaw.note,
+        },
+      }
+    : null;
 
   // --- Sector rotation ---
   const rotation = await computeSectorRotation(supabase);
@@ -119,7 +163,7 @@ export async function GET(request: Request) {
     const gainers = [...withDelta].sort((a, b) => b.delta - a.delta).slice(0, 2);
     const decliners = [...withDelta].sort((a, b) => a.delta - b.delta).slice(0, 2);
     for (const s of gainers) {
-      if (s.delta > 0.05) {
+if (s.delta > 0.05) {
         sectorRotation.push(`${s.sector} strengthening (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(2)} avg score vs ${rotation.priorDate}).`);
       }
     }
@@ -252,6 +296,9 @@ export async function GET(request: Request) {
     technicalFlags,
     newsSummary,
     sectorRotation,
+    modelPerformance,
+    modelPerformanceExcluding,
+    rebalance,
     portfolioNote,
     dataQualityNote,
   });
@@ -280,5 +327,8 @@ export async function GET(request: Request) {
     candidatesCount: candidates.length,
     riskFlagsCount: riskFlags.length,
     technicalFlagsCount: technicalFlags.length,
+    rebalanceAdded: rebalance.added,
+    rebalanceDropped: rebalance.dropped,
+    modelDaysTracked: modelPerformance?.daysTracked ?? 0,
   });
 }
