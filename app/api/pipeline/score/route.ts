@@ -36,6 +36,8 @@ export async function GET(request: Request) {
 
   const supabase = getServiceSupabase();
 
+  // Only score individual stocks - ETFs don't have meaningful P/E, ROE,
+  // etc. and need a different (yield/expense-ratio based) approach later.
   const { data: universeRows, error: universeError } = await supabase
     .from("universe")
     .select("ticker")
@@ -60,6 +62,7 @@ export async function GET(request: Request) {
     (fundamentalsRows ?? []).map((r) => [r.ticker as string, r])
   );
 
+  // --- Momentum: total return over whatever price history is available ---
   const priceRows = await fetchAllPriceHistory(supabase);
   const priceRange = new Map<string, { firstClose: number; firstDate: string; lastClose: number; lastDate: string }>();
   for (const row of priceRows) {
@@ -73,6 +76,8 @@ export async function GET(request: Request) {
         lastDate: row.date,
       });
     } else {
+      // priceRows is ordered by date ascending, so the latest row we see
+      // for a ticker is always the most recent - just keep updating "last"
       existing.lastClose = row.close;
       existing.lastDate = row.date;
     }
@@ -81,6 +86,11 @@ export async function GET(request: Request) {
   const momentumRaw: Record<string, number | null> = {};
   for (const ticker of tickers) {
     const range = priceRange.get(ticker);
+    // Require at least 2 distinct trading days to compute a return at all.
+    // NOTE: with the pipeline freshly deployed, this window will be short
+    // (a few days) until price_history has accumulated more history -
+    // momentum scores will sharpen up over the following weeks as more
+    // daily runs land. This isn't a bug, just an early-data limitation.
     if (!range || range.firstDate === range.lastDate || range.firstClose === 0) {
       momentumRaw[ticker] = null;
       continue;
@@ -88,6 +98,20 @@ export async function GET(request: Request) {
     momentumRaw[ticker] = (range.lastClose - range.firstClose) / range.firstClose;
   }
 
+  // A negative P/E, EV/EBITDA, or price/book isn't a "very cheap" reading -
+  // it's an accounting artifact of a loss-making company or negative book
+  // equity. Before this fix, a negative value got z-scored and then
+  // inverted (since lower is normally "better" for these) into a strongly
+  // POSITIVE score - the opposite of what the number actually means. The
+  // fix: treat a negative value on these specific metrics as missing data
+  // rather than as a valuation signal. FCF yield is untouched since a
+  // negative FCF yield is a real, meaningfully bad reading, not an
+  // artifact - it doesn't need this treatment.
+  function positiveOrNull(v: number | null | undefined): number | null {
+    return v !== null && v !== undefined && v > 0 ? v : null;
+  }
+
+  // --- Build raw metric maps from fundamentals ---
   const trailingPe: Record<string, number | null> = {};
   const evToEbitda: Record<string, number | null> = {};
   const fcfYield: Record<string, number | null> = {};
@@ -100,17 +124,19 @@ export async function GET(request: Request) {
 
   for (const ticker of tickers) {
     const f = fundamentalsByTicker.get(ticker);
-    trailingPe[ticker] = f?.trailing_pe ?? null;
-    evToEbitda[ticker] = f?.ev_to_ebitda ?? null;
+    trailingPe[ticker] = positiveOrNull(f?.trailing_pe);
+    evToEbitda[ticker] = positiveOrNull(f?.ev_to_ebitda);
     fcfYield[ticker] = f?.fcf_yield ?? null;
-    priceToBook[ticker] = f?.price_to_book ?? null;
+    priceToBook[ticker] = positiveOrNull(f?.price_to_book);
     roe[ticker] = f?.return_on_equity ?? null;
     profitMargin[ticker] = f?.profit_margin ?? null;
-    debtToEquity[ticker] = f?.debt_to_equity ?? null;
+    debtToEquity[ticker] = positiveOrNull(f?.debt_to_equity);
     revenueGrowth[ticker] = f?.revenue_growth ?? null;
     earningsGrowth[ticker] = f?.earnings_growth ?? null;
   }
 
+  // --- Z-score each metric across the universe ---
+  // invert: true means "lower raw value = better", so we flip the sign
   const zTrailingPe = zScoreMap(trailingPe, true);
   const zEvToEbitda = zScoreMap(evToEbitda, true);
   const zFcfYield = zScoreMap(fcfYield, false);
@@ -160,6 +186,7 @@ export async function GET(request: Request) {
     });
   }
 
+  // Batch upserts, 500 at a time
   let upserted = 0;
   const batchSize = 500;
   for (let i = 0; i < rows.length; i += batchSize) {

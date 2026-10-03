@@ -15,7 +15,7 @@ export const CURATED_EUROPE: CuratedStock[] = [
   { ticker: "VOLV-B.ST", name: "Volvo B", country: "Sweden", sector: "Industrials" },
   { ticker: "ATCO-A.ST", name: "Atlas Copco A", country: "Sweden", sector: "Industrials" },
   { ticker: "INVE-B.ST", name: "Investor B", country: "Sweden", sector: "Financials" },
-  { ticker: "ERIC-B.ST", name: "Ericsson B", country: "Sweden", sector: "Technology" },
+  { ticker: "ERIC-B.ST", name: "Ericsson B", country: "Sweden", sector: "Information Technology" },
   { ticker: "HM-B.ST", name: "H&M B", country: "Sweden", sector: "Consumer Discretionary" },
   { ticker: "SAND.ST", name: "Sandvik", country: "Sweden", sector: "Industrials" },
   { ticker: "SEB-A.ST", name: "SEB A", country: "Sweden", sector: "Financials" },
@@ -26,13 +26,13 @@ export const CURATED_EUROPE: CuratedStock[] = [
   { ticker: "EVO.ST", name: "Evolution", country: "Sweden", sector: "Consumer Discretionary" },
   { ticker: "SKF-B.ST", name: "SKF B", country: "Sweden", sector: "Industrials" },
   { ticker: "ALFA.ST", name: "Alfa Laval", country: "Sweden", sector: "Industrials" },
-  { ticker: "HEXA-B.ST", name: "Hexagon B", country: "Sweden", sector: "Technology" },
+  { ticker: "HEXA-B.ST", name: "Hexagon B", country: "Sweden", sector: "Information Technology" },
 
   // Norway
   { ticker: "EQNR.OL", name: "Equinor", country: "Norway", sector: "Energy" },
   { ticker: "DNB.OL", name: "DNB Bank", country: "Norway", sector: "Financials" },
   { ticker: "MOWI.OL", name: "Mowi", country: "Norway", sector: "Consumer Staples" },
-  { ticker: "TEL.OL", name: "Telenor", country: "Norway", sector: "Communication" },
+  { ticker: "TEL.OL", name: "Telenor", country: "Norway", sector: "Communication Services" },
   { ticker: "NHY.OL", name: "Norsk Hydro", country: "Norway", sector: "Materials" },
 
   // Denmark
@@ -43,17 +43,17 @@ export const CURATED_EUROPE: CuratedStock[] = [
   { ticker: "CARL-B.CO", name: "Carlsberg B", country: "Denmark", sector: "Consumer Staples" },
 
   // Finland
-  { ticker: "NOKIA.HE", name: "Nokia", country: "Finland", sector: "Technology" },
+  { ticker: "NOKIA.HE", name: "Nokia", country: "Finland", sector: "Information Technology" },
   { ticker: "KNEBV.HE", name: "KONE", country: "Finland", sector: "Industrials" },
   { ticker: "SAMPO.HE", name: "Sampo", country: "Finland", sector: "Financials" },
   { ticker: "WRT1V.HE", name: "Wartsila", country: "Finland", sector: "Industrials" },
   { ticker: "NDA-FI.HE", name: "Nordea Bank", country: "Finland", sector: "Financials" },
 
   // Germany (DAX 40 core names)
-  { ticker: "SAP.DE", name: "SAP", country: "Germany", sector: "Technology" },
+  { ticker: "SAP.DE", name: "SAP", country: "Germany", sector: "Information Technology" },
   { ticker: "SIE.DE", name: "Siemens", country: "Germany", sector: "Industrials" },
   { ticker: "ALV.DE", name: "Allianz", country: "Germany", sector: "Financials" },
-  { ticker: "DTE.DE", name: "Deutsche Telekom", country: "Germany", sector: "Communication" },
+  { ticker: "DTE.DE", name: "Deutsche Telekom", country: "Germany", sector: "Communication Services" },
   { ticker: "MBG.DE", name: "Mercedes-Benz Group", country: "Germany", sector: "Consumer Discretionary" },
 
   // France (CAC 40 core names)
@@ -70,7 +70,7 @@ export const CURATED_EUROPE: CuratedStock[] = [
   { ticker: "UBSG.SW", name: "UBS Group", country: "Switzerland", sector: "Financials" },
 
   // Netherlands
-  { ticker: "ASML.AS", name: "ASML", country: "Netherlands", sector: "Technology" },
-  { ticker: "ADYEN.AS", name: "Adyen", country: "Netherlands", sector: "Technology" },
+  { ticker: "ASML.AS", name: "ASML", country: "Netherlands", sector: "Information Technology" },
+  { ticker: "ADYEN.AS", name: "Adyen", country: "Netherlands", sector: "Information Technology" },
   { ticker: "AD.AS", name: "Ahold Delhaize", country: "Netherlands", sector: "Consumer Staples" },
 ];

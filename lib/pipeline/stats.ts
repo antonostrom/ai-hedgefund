@@ -17,11 +17,20 @@ export function stdDev(values: number[]): number {
   return Math.sqrt(variance);
 }
 
+// Winsorizing cap - without this, one freakishly extreme metric (a data
+// glitch, a genuinely extreme outlier) can swing a whole category score on
+// its own. +-3 standard deviations is a standard, conservative cutoff:
+// under a normal distribution, over 99% of values already fall inside it,
+// so this only ever touches genuine extremes, never ordinary spread.
+const Z_SCORE_CAP = 3;
+
 /**
  * Computes a z-score map for a single metric across the universe.
  * `invert: true` for metrics where LOWER is better (e.g. P/E, debt/equity) -
  * this flips the sign so a high z-score always means "good" regardless of
- * the underlying metric's natural direction.
+ * the underlying metric's natural direction. Every z-score is capped at
+ * +-Z_SCORE_CAP before inversion, so no single stock's extreme reading can
+ * dominate a category average.
  */
 export function zScoreMap(
   rawValues: Record<string, number | null>,
@@ -39,7 +48,8 @@ export function zScoreMap(
       out[ticker] = null;
       continue;
     }
-    const z = (value - m) / sd;
+    let z = (value - m) / sd;
+    z = Math.max(-Z_SCORE_CAP, Math.min(Z_SCORE_CAP, z));
     out[ticker] = invert ? -z : z;
   }
   return out;
