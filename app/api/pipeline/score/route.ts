@@ -4,29 +4,13 @@ import { zScoreMap, averageSkipNull } from "@/lib/pipeline/stats";
 
 export const maxDuration = 300;
 
-type PriceRow = { ticker: string; date: string; close: number | null };
-
-async function fetchAllPriceHistory(
-  supabase: ReturnType<typeof getServiceSupabase>
-): Promise<PriceRow[]> {
-  const pageSize = 1000;
-  let from = 0;
-  const all: PriceRow[] = [];
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { data, error } = await supabase
-      .from("price_history")
-      .select("ticker, date, close")
-      .order("date", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    all.push(...(data as PriceRow[]));
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-  return all;
-}
+type PriceRange = {
+  ticker: string;
+  first_close: number;
+  first_date: string;
+  last_close: number;
+  last_date: string;
+};
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -48,7 +32,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: universeError?.message ?? "No universe data" }, { status: 500 });
   }
   const tickers = universeRows.map((r) => r.ticker);
-  const tickerSet = new Set(tickers);
 
   const { data: fundamentalsRows, error: fundamentalsError } = await supabase
     .from("fundamentals")
@@ -63,39 +46,36 @@ export async function GET(request: Request) {
   );
 
   // --- Momentum: total return over whatever price history is available ---
-  const priceRows = await fetchAllPriceHistory(supabase);
-  const priceRange = new Map<string, { firstClose: number; firstDate: string; lastClose: number; lastDate: string }>();
-  for (const row of priceRows) {
-    if (!tickerSet.has(row.ticker) || row.close === null) continue;
-    const existing = priceRange.get(row.ticker);
-    if (!existing) {
-      priceRange.set(row.ticker, {
-        firstClose: row.close,
-        firstDate: row.date,
-        lastClose: row.close,
-        lastDate: row.date,
-      });
-    } else {
-      // priceRows is ordered by date ascending, so the latest row we see
-      // for a ticker is always the most recent - just keep updating "last"
-      existing.lastClose = row.close;
-      existing.lastDate = row.date;
-    }
+  // Computed via a Postgres function (get_price_range) rather than pulling
+  // price_history's full ~330,000+ rows over the network and reducing them
+  // in JS - that approach worked fine when the table was small, but after
+  // the 2-year backfill it made this route slow enough to risk the 5-minute
+  // function timeout. The database already has what it needs locally; this
+  // just asks for the two numbers per ticker that actually matter.
+  const { data: priceRanges, error: priceRangeError } = await supabase.rpc(
+    "get_price_range",
+    { ticker_list: tickers }
+  );
+  if (priceRangeError) {
+    return NextResponse.json({ error: priceRangeError.message }, { status: 500 });
   }
+  const priceRangeByTicker = new Map(
+    ((priceRanges ?? []) as PriceRange[]).map((r) => [r.ticker, r])
+  );
 
   const momentumRaw: Record<string, number | null> = {};
   for (const ticker of tickers) {
-    const range = priceRange.get(ticker);
+    const range = priceRangeByTicker.get(ticker);
     // Require at least 2 distinct trading days to compute a return at all.
     // NOTE: with the pipeline freshly deployed, this window will be short
     // (a few days) until price_history has accumulated more history -
     // momentum scores will sharpen up over the following weeks as more
     // daily runs land. This isn't a bug, just an early-data limitation.
-    if (!range || range.firstDate === range.lastDate || range.firstClose === 0) {
+    if (!range || range.first_date === range.last_date || range.first_close === 0) {
       momentumRaw[ticker] = null;
       continue;
     }
-    momentumRaw[ticker] = (range.lastClose - range.firstClose) / range.firstClose;
+    momentumRaw[ticker] = (range.last_close - range.first_close) / range.first_close;
   }
 
   // A negative P/E, EV/EBITDA, or price/book isn't a "very cheap" reading -
