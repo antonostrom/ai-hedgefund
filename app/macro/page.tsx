@@ -25,6 +25,14 @@ type Kpi = {
   note: string | null;
 };
 
+type EconLevel = {
+  current: number | null;
+  priorValue: number | null;
+  changePts: number | null;
+  asOfDate: string | null;
+  note: string | null;
+};
+
 type MacroData = {
   kpis: Kpi[];
   yieldCurve: { currentSpread: number; interpretation: { label: string; tone: string } } | null;
@@ -39,8 +47,18 @@ type MacroData = {
   yieldCurve10y2y: { currentSpread: number; interpretation: { label: string; tone: string } } | null;
   yieldCurve10y2ySeries: { date: string; spread: number }[];
   vixSeries: { date: string; value: number }[];
+  cpiYoy: EconLevel;
+  cpiYoySeries: { date: string; yoy: number }[];
+  unemployment: EconLevel;
+  gdpGrowth: EconLevel;
   asOf: string;
 };
+
+function fmtPts(n: number | null): string {
+  if (n === null) return "—";
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${n.toFixed(2)}pp`;
+}
 
 function fmtVal(n: number, unit: string): string {
   if (unit === "percent") return `${n.toFixed(2)}%`;
@@ -211,6 +229,88 @@ export default function MacroPage() {
               )}
             </div>
 
+            <section className="rounded-lg border border-slate-800 bg-slate-900 p-5">
+              <h2 className="mb-1 text-sm font-medium uppercase tracking-wide text-slate-400">
+                Real Economy (FRED)
+              </h2>
+              <p className="mb-3 text-xs text-slate-500">
+                Monthly and quarterly releases — these change far less often than the market signals above.
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">CPI Inflation (YoY)</div>
+                  {data.cpiYoy.current !== null ? (
+                    <>
+                      <div className="mt-1 font-mono text-2xl">{data.cpiYoy.current.toFixed(1)}%</div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        vs. prior month {fmtPts(data.cpiYoy.changePts)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">As of {data.cpiYoy.asOfDate}</div>
+                    </>
+                  ) : (
+                    <div className="mt-1 text-sm text-amber-400">{data.cpiYoy.note}</div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Unemployment Rate</div>
+                  {data.unemployment.current !== null ? (
+                    <>
+                      <div className="mt-1 font-mono text-2xl">{data.unemployment.current.toFixed(1)}%</div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        vs. prior month {fmtPts(data.unemployment.changePts)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">As of {data.unemployment.asOfDate}</div>
+                    </>
+                  ) : (
+                    <div className="mt-1 text-sm text-amber-400">{data.unemployment.note}</div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Real GDP Growth (annualized)</div>
+                  {data.gdpGrowth.current !== null ? (
+                    <>
+                      <div className="mt-1 font-mono text-2xl">{data.gdpGrowth.current.toFixed(1)}%</div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        vs. prior quarter {fmtPts(data.gdpGrowth.changePts)}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">As of {data.gdpGrowth.asOfDate}</div>
+                    </>
+                  ) : (
+                    <div className="mt-1 text-sm text-amber-400">{data.gdpGrowth.note}</div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {data.cpiYoySeries.length > 1 && (
+              <section className="rounded-lg border border-slate-800 bg-slate-900 p-5">
+                <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
+                  CPI inflation trend (YoY %, last {data.cpiYoySeries.length} months)
+                </h2>
+                <div style={{ width: "100%", height: 220 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={data.cpiYoySeries}>
+                      <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} minTickGap={50} />
+                      <YAxis tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(v) => `${v}%`} width={45} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", fontSize: 12 }}
+                        labelStyle={{ color: "#94a3b8" }}
+                        formatter={(value: any) => `${Number(value).toFixed(1)}%`}
+                      />
+                      <ReferenceLine y={2} stroke="#f59e0b" strokeDasharray="4 4" />
+                      <Line type="monotone" dataKey="yoy" stroke="#22d3ee" dot={false} strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Amber dashed line marks 2% — the Federal Reserve's long-run inflation target.
+                </p>
+              </section>
+            )}
+
             {data.yieldCurve10y2ySeries.length > 1 && (
               <section className="rounded-lg border border-slate-800 bg-slate-900 p-5">
                 <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
@@ -294,10 +394,9 @@ export default function MacroPage() {
             )}
 
             <div className="rounded border border-slate-800 bg-slate-900/50 px-4 py-3 text-xs text-slate-500">
-              These are market-based signals derived from index/ETF prices — not official economic data
-              (CPI, unemployment, PMI, GDP). Interpretations describe historical associations, not
-              predictions. Adding real economic indicators would need a separate data source (e.g. FRED)
-              and is a natural next phase, not built yet.
+              The KPI grid above is market-based signals derived from index/ETF prices. The Real
+              Economy section below it adds official FRED data (CPI, unemployment, GDP) — ISM
+              Manufacturing PMI isn't on FRED directly and isn't included yet.
             </div>
           </>
         )}
